@@ -25,8 +25,8 @@ import random
 
 def main():
     random.seed(2023)
-    origin_path = "./data/train_org"
-    train_path = "./data/train"
+    origin_path = "./data/train"
+    train_path = "./data/train1"
     val_path = "./data/validation"
 
     assert os.path.exists(origin_path)

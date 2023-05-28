@@ -146,7 +146,7 @@ def train(train_loader, model, loss_fn, optimizer, epoch, writer):
     train_acc_record = AverageMeter(name="train_acc_record")
 
     with tqdm(train_loader, desc=f"TRAIN EPOCH: {epoch}") as train_bar:
-        for (data, target) in train_bar:
+        for batch_no,(data, target) in enumerate(train_bar):
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
@@ -155,8 +155,14 @@ def train(train_loader, model, loss_fn, optimizer, epoch, writer):
             optimizer.step()
 
             acc1 = accuracy(output, target, topk=(1,))
+
             train_acc_record.update(acc1[0].item(), data.size(0))
             train_loss_record.update(loss.item(), data.size(0))
+            writer.add_scalar("train_loss_per_batch", train_loss_record.avg, batch_no + epoch*len(train_loader))
+            writer.add_scalar("train_acc_per_batch", train_acc_record.avg, batch_no + epoch*len(train_loader))
+            # if batch_no % 10 == 0:
+            #     writer.add_scalar("train_loss_per_100batch", train_loss_record.avg, batch_no + epoch*len(train_loader))
+            #     writer.add_scalar("train_acc_per_100batch", train_acc_record.avg, batch_no + epoch*len(train_loader))
 
     writer.add_scalar("train_loss", train_loss_record.avg, epoch)
     writer.add_scalar("train_acc", train_acc_record.avg, epoch)
@@ -237,7 +243,8 @@ def main():
         os.makedirs(log_path)
     writer = SummaryWriter(log_path)
     # os.system(f"tensorboard --logdir={log_path} --bind_all")
-    # $tensorboard --logdir="D:\Log" --bind_all
+    # $tensorboard --logdir="D:\Log" --bind_all 
+    # $tensorboard --logdir="logs" --bind_all
 
     model_save_path = r"./model"  # 模型待存储路径
     if not os.path.exists(model_save_path):
@@ -248,12 +255,12 @@ def main():
     # argparse
     parser = argparse.ArgumentParser(description='Dogs VS. Cats MYZHIBEI')
     parser.add_argument('--batch-size', type=int, default=32,
-                        help='input batch size for training (default: 625)')
-    parser.add_argument('--epochs', type=int, default=2,
+                        help='input batch size for training (default: 32)')
+    parser.add_argument('--epochs', type=int, default=30,
                         help='number of epochs to train (default: 10)')
-    parser.add_argument('--lr', type=float, default=0.001,
+    parser.add_argument('--lr', type=float, default=0.1,
                         help='learning rate (default: 0.001)')
-    parser.add_argument('--seed', type=int, default=2,
+    parser.add_argument('--seed', type=int, default=2023,
                         help='random seed (default: 1)')
     parser.add_argument('--workers', type=int, default=8,
                         help='multiworkers (default: 1)')
@@ -271,7 +278,7 @@ def main():
         ]
     )
 
-    train_dataset_path = dataset_path + '/train/'
+    train_dataset_path = dataset_path + '/train1/'
     val_dataset_path = dataset_path + '/validation/'
 
     train_dataset = ImageFolder(train_dataset_path, transform=transform)
@@ -294,24 +301,26 @@ def main():
     writer.flush()
     model = Net(num_classes=2)
 
-    state_dict = torch.utils.model_zoo.load_url(
-        'http://download.pytorch.org/models/alexnet-owt-7be5be79.pth')
-    for key in list(state_dict.keys()):
-        if "classifier.6" in key:
-            del state_dict[key]
-    model.load_state_dict(state_dict, strict=False)
+    # state_dict = torch.utils.model_zoo.load_url(
+    #     'http://download.pytorch.org/models/alexnet-owt-7be5be79.pth')
+    # for key in list(state_dict.keys()):
+    #     if "classifier.6" in key:
+    #         del state_dict[key]
+    # model.load_state_dict(state_dict, strict=False)
 
     model.to(device)
 
     # optimizer
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.SGD(params=model.parameters(), lr=args.lr)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer,  lr_lambda=lambda epoch: 1/(epoch+1))
 
     # train
     save_dict = {"max": 0, "epoch": 0, "state_dict": model.state_dict()}
     for epoch in range(args.epochs):
-        train(train_loader, model, loss_fn, optimizer, epoch, writer)
+        train(train_loader, model, loss_fn, optimizer, epoch, writer)        
         validate(vld_loader, model, loss_fn, epoch, writer, save_dict)
+        scheduler.step()
     writer.close()
 
     time = datetime.strftime(datetime.now(), '%Y%m%d-%H%M%S')
@@ -319,14 +328,14 @@ def main():
 
     torch.save(save_dict["state_dict"], model_save_name)
 
-    test_dataset_path = dataset_path + '/test/'
+    test_dataset_path = dataset_path + '/test1/'
     test_model(model_save_name, test_dataset_path)
+    
 
 
 if __name__ == "__main__":
     main()
     # test_dataset_path = 'data/test1/'
-    # model_save_name = 'model/epoch_0_cuda_2023_05_27.pth'
-    # print(f"test model {model_save_name}:")
+    # model_save_name = 'model/epoch_1_cuda_20230528-160807.pth'
     # test_model(model_save_name, test_dataset_path)
     print("Finished")
